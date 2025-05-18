@@ -76,8 +76,9 @@
 <script>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAuth, signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth'
-import { app } from '@/firebase/config'
+import { getAuth, signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { app, db } from '@/firebase/config'
 
 export default {
   name: 'LoginForm',
@@ -104,10 +105,30 @@ export default {
         
         // Sign in with email and password
         const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value)
-        console.log('Login successful, user:', userCredential.user.uid)
+        const user = userCredential.user
+        console.log('Authentication successful, user:', user.uid)
+        
+        // Check if user is approved in Firestore
+        const userDoc = await getDoc(doc(db, 'users', user.uid))
+        
+        if (!userDoc.exists()) {
+          // User doesn't exist in Firestore
+          errorMessage.value = 'Account not found. Please contact an administrator.'
+          await signOut(auth) // Sign out the user since they're not approved
+          return
+        }
+        
+        const userData = userDoc.data()
+        
+        if (!userData.approved) {
+          // User exists but is not approved
+          errorMessage.value = 'Your account is pending approval by an administrator. You will be notified when your account is approved.'
+          await signOut(auth) // Sign out the user since they're not approved
+          return
+        }
         
         // Get user token to check claims
-        const idTokenResult = await userCredential.user.getIdTokenResult(true) // Force refresh token
+        const idTokenResult = await user.getIdTokenResult(true) // Force refresh token
         console.log('User claims:', idTokenResult.claims)
         const isAdmin = idTokenResult.claims.admin === true
         console.log('Is admin?', isAdmin)

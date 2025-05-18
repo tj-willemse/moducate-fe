@@ -265,7 +265,8 @@ export default {
     const logout = async () => {
       try {
         await signOut(auth);
-        router.push('/login');
+        // Navigate to the root path which is mapped to the login view
+        router.push('/');
       } catch (error) {
         console.error('Error signing out:', error);
       }

@@ -3,9 +3,7 @@
     <h1 class="text-3xl font-bold">Create an Account</h1>
     <p class="text-gray-600 mb-8">Register to access the assessment moderation dashboard</p>
     
-    <div v-if="errorMessage" class="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-      {{ errorMessage }}
-    </div>
+    <!-- We don't need these notifications anymore as we're using Vue Toastification -->
     
     <form @submit.prevent="handleRegister">
       <div class="mb-4">
@@ -114,7 +112,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
-import { app } from '@/firebase/config'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { app, db } from '@/firebase/config'
+import { useToast } from 'vue-toastification'
 
 export default {
   name: 'RegisterForm',
@@ -126,16 +126,14 @@ export default {
     const confirmPassword = ref('')
     const role = ref('moderator')
     const isLoading = ref(false)
-    const errorMessage = ref('')
     const router = useRouter()
     const auth = getAuth(app)
+    const toast = useToast()
     
     const handleRegister = async () => {
-      errorMessage.value = ''
-      
       // Validate passwords match
       if (password.value !== confirmPassword.value) {
-        errorMessage.value = 'Passwords do not match.'
+        toast.error('Passwords do not match.')
         return
       }
       
@@ -144,30 +142,55 @@ export default {
       try {
         // Create user with email and password
         const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value)
+        const user = userCredential.user
         
         // Update profile with name
-        await updateProfile(userCredential.user, {
+        await updateProfile(user, {
           displayName: name.value
         })
         
-        // Redirect to dashboard on successful registration
-        router.push('/dashboard')
+        // Save user data to Firestore with pending approval status
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          fullName: name.value,
+          email: email.value,
+          role: role.value,
+          approved: false, // User starts as unapproved
+          active: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+        
+        // Clear form
+        name.value = ''
+        email.value = ''
+        password.value = ''
+        confirmPassword.value = ''
+        
+        // Show success message with toast
+        toast.success('Registration successful! Your account is pending approval by an administrator.')
+        
+        // Wait 3 seconds before redirecting to login
+        setTimeout(() => {
+          // Go back to login page
+          goToLogin()
+        }, 3000)
       } catch (error) {
         console.error('Registration error:', error)
         
-        // Handle different error codes
+        // Handle different error codes with toast notifications
         switch (error.code) {
           case 'auth/email-already-in-use':
-            errorMessage.value = 'This email is already in use.'
+            toast.error('This email is already in use.')
             break
           case 'auth/invalid-email':
-            errorMessage.value = 'Invalid email address format.'
+            toast.error('Invalid email address format.')
             break
           case 'auth/weak-password':
-            errorMessage.value = 'Password is too weak. Please use a stronger password.'
+            toast.error('Password is too weak. Please use a stronger password.')
             break
           default:
-            errorMessage.value = 'Failed to register. Please try again.'
+            toast.error('Failed to register. Please try again.')
         }
       } finally {
         isLoading.value = false
@@ -185,7 +208,6 @@ export default {
       confirmPassword,
       role,
       isLoading,
-      errorMessage,
       handleRegister,
       goToLogin
     }
