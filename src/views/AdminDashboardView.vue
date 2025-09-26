@@ -148,6 +148,12 @@
           />
         </div>
         
+        <!-- Subjects Section -->
+        <div v-if="activeSection === 'subjects'" class="space-y-6">
+          <h1 class="text-2xl font-semibold text-gray-900">Subject Management</h1>
+          <Subjects />
+        </div>
+
         <!-- Assessments Section -->
         <div v-if="activeSection === 'assessments'" class="space-y-6">
           <h1 class="text-2xl font-semibold text-gray-900">Assessments</h1>
@@ -206,9 +212,11 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, defineComponent, h } from 'vue';
 import { getAuth, signOut } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { db } from '@/firebase/config';
 import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
 
@@ -218,39 +226,88 @@ import StatCard from '@/components/shared/StatCard.vue';
 import DashboardChart from '@/components/shared/DashboardChart.vue';
 import AssessmentTable from '@/components/shared/AssessmentTable.vue';
 import UserManagement from '@/components/admin/UserManagement.vue';
+import Subjects from '@/components/admin/Subjects.vue';
 
 // Icons for stat cards
-const AssessmentIcon = {
-  template: `
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-    </svg>
-  `
-};
+const AssessmentIcon = defineComponent({
+  name: 'AssessmentIcon',
+  render() {
+    return h('svg', {
+      xmlns: 'http://www.w3.org/2000/svg',
+      fill: 'none',
+      viewBox: '0 0 24 24',
+      stroke: 'currentColor',
+      class: this.$attrs.class
+    }, [
+      h('path', {
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+        'stroke-width': '2',
+        d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
+      })
+    ]);
+  }
+});
 
-const PendingIcon = {
-  template: `
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  `
-};
+const PendingIcon = defineComponent({
+  name: 'PendingIcon',
+  render() {
+    return h('svg', {
+      xmlns: 'http://www.w3.org/2000/svg',
+      fill: 'none',
+      viewBox: '0 0 24 24',
+      stroke: 'currentColor',
+      class: this.$attrs.class
+    }, [
+      h('path', {
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+        'stroke-width': '2',
+        d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
+      })
+    ]);
+  }
+});
 
-const CompletedIcon = {
-  template: `
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  `
-};
+const CompletedIcon = defineComponent({
+  name: 'CompletedIcon',
+  render() {
+    return h('svg', {
+      xmlns: 'http://www.w3.org/2000/svg',
+      fill: 'none',
+      viewBox: '0 0 24 24',
+      stroke: 'currentColor',
+      class: this.$attrs.class
+    }, [
+      h('path', {
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+        'stroke-width': '2',
+        d: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+      })
+    ]);
+  }
+});
 
-const ModeratorIcon = {
-  template: `
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  `
-};
+const ModeratorIcon = defineComponent({
+  name: 'ModeratorIcon',
+  render() {
+    return h('svg', {
+      xmlns: 'http://www.w3.org/2000/svg',
+      fill: 'none',
+      viewBox: '0 0 24 24',
+      stroke: 'currentColor',
+      class: this.$attrs.class
+    }, [
+      h('path', {
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+        'stroke-width': '2',
+        d: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z'
+      })
+    ]);
+  }
+});
 
 export default {
   name: 'AdminDashboardView',
@@ -260,6 +317,7 @@ export default {
     DashboardChart,
     AssessmentTable,
     UserManagement,
+    Subjects,
     AssessmentIcon,
     PendingIcon,
     CompletedIcon,
@@ -321,20 +379,44 @@ export default {
       // Use a promise to handle the initial auth state
       const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
         if (firebaseUser) {
-          // In a real app, we would check if the user is an admin here
-          // by fetching their custom claims or checking their role in Firestore
-          user.value = {
-            ...firebaseUser,
-            role: 'admin' // Hardcoded for now, would come from custom claims or Firestore
-          };
-          await loadData();
-        } else {
-          // Only redirect to login if we're sure the user is not authenticated
-          // This prevents flashing to login during the initial auth check
-          const currentUser = auth.currentUser;
-          if (!currentUser) {
+          try {
+            // Get the ID token with force refresh to ensure we have the latest token
+            await firebaseUser.getIdToken(true);
+            
+            // Get the user's custom claims
+            const idTokenResult = await firebaseUser.getIdTokenResult();
+            console.log('User claims:', idTokenResult.claims);
+            
+            // Set the user object with role information from claims
+            user.value = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName || 'User',
+              // Add a mock profile image URL if none exists
+              photoURL: firebaseUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(firebaseUser.displayName || 'User') + '&background=6366f1&color=fff',
+              profileImageUrl: firebaseUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(firebaseUser.displayName || 'User') + '&background=6366f1&color=fff',
+              role: idTokenResult.claims.admin ? 'admin' : 
+                    idTokenResult.claims.moderator ? 'moderator' : 
+                    idTokenResult.claims.lecturer ? 'lecturer' : 'user',
+              approved: idTokenResult.claims.approved || false
+            };
+            
+            // Only load data if user is authenticated and approved
+            if (user.value.approved) {
+              await loadData();
+            } else {
+              toast.error('Your account is pending approval');
+              router.push('/login');
+            }
+          } catch (error) {
+            console.error('Error getting user claims:', error);
+            toast.error('Authentication error. Please log in again.');
+            await signOut(auth);
             router.push('/login');
           }
+        } else {
+          // User is not authenticated, redirect to login
+          router.push('/login');
         }
         loading.value = false;
       });
@@ -344,31 +426,72 @@ export default {
     });
 
     const loadData = async () => {
+      if (!user.value || !user.value.uid) {
+        console.error('Cannot load data: User not authenticated');
+        return;
+      }
+      
       loading.value = true;
       try {
-        // Load all users
-        const getUsers = httpsCallable(functions, 'getUsers');
-        const usersResult = await getUsers({});
-        users.value = usersResult.data?.users || [];
+        console.log('Loading live data for dashboard');
         
-        // Filter users by approval status
-        pendingUsers.value = users.value.filter(user => !user.approved);
-        activeUsers.value = users.value.filter(user => user.approved);
+        // Make sure we have a fresh token before making API calls
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          await currentUser.getIdToken(true);
+        }
+        
+        // Load all users - only if user is admin
+        if (user.value.role === 'admin') {
+          try {
+            // Use Firestore directly to get users
+            const usersCollection = collection(db, 'users');
+            const usersSnapshot = await getDocs(usersCollection);
+            
+            users.value = usersSnapshot.docs.map(doc => ({
+              id: doc.id,
+              uid: doc.id,
+              fullName: doc.data().displayName || doc.data().fullName,
+              displayName: doc.data().displayName || doc.data().fullName,
+              email: doc.data().email,
+              role: doc.data().role,
+              approved: doc.data().approved || false,
+              createdAt: doc.data().createdAt
+            }));
+            
+            // Filter users by approval status
+            pendingUsers.value = users.value.filter(u => !u.approved);
+            activeUsers.value = users.value.filter(u => u.approved);
+          } catch (userError) {
+            console.error('Error loading users:', userError);
+            toast.error('Failed to load users. Please try again.');
+          }
+        }
 
         // Load all assessments
-        const getAssessments = httpsCallable(functions, 'getAssessments');
-        const assessmentsResult = await getAssessments({});
-        assessments.value = assessmentsResult.data?.assessments || [];
-        
-        // Get recent assessments for the dashboard
-        recentAssessments.value = [...assessments.value]
-          .sort((a, b) => {
-            // Sort by creation date, newest first
-            const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-            const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-            return dateB - dateA;
-          })
-          .slice(0, 5); // Get top 5 most recent
+        try {
+          // Use Firestore directly to get assessments
+          const assessmentsCollection = collection(db, 'assessments');
+          const assessmentsSnapshot = await getDocs(assessmentsCollection);
+          
+          assessments.value = assessmentsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          // Get recent assessments for the dashboard
+          recentAssessments.value = [...assessments.value]
+            .sort((a, b) => {
+              // Sort by creation date, newest first
+              const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+              const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+              return dateB - dateA;
+            })
+            .slice(0, 5); // Get top 5 most recent
+        } catch (assessmentError) {
+          console.error('Error loading assessments:', assessmentError);
+          toast.error('Failed to load assessments. Please try again.');
+        }
       } catch (error) {
         console.error('Error loading data:', error);
         toast.error('Failed to load data. Please try again.');
@@ -380,11 +503,24 @@ export default {
     const approveUser = async (userId) => {
       try {
         loading.value = true;
-        const approveUserFunc = httpsCallable(functions, 'approveUser');
-        await approveUserFunc({ userId, approved: true });
+        console.log('Approving user with ID:', userId);
         
-        // Refresh the user lists
-        await loadData();
+        // Update user in Firestore
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, {
+          approved: true,
+          updatedAt: new Date()
+        });
+        
+        // Update the local user list
+        const userIndex = users.value.findIndex(u => u.uid === userId);
+        if (userIndex !== -1) {
+          users.value[userIndex].approved = true;
+          // Update the pending and active users lists
+          pendingUsers.value = users.value.filter(u => !u.approved);
+          activeUsers.value = users.value.filter(u => u.approved);
+        }
+        
         toast.success('User approved successfully');
       } catch (error) {
         console.error('Error approving user:', error);
@@ -397,11 +533,18 @@ export default {
     const rejectUser = async (userId) => {
       try {
         loading.value = true;
-        const approveUserFunc = httpsCallable(functions, 'approveUser');
-        await approveUserFunc({ userId, approved: false });
+        console.log('Rejecting user with ID:', userId);
         
-        // Refresh the user lists
-        await loadData();
+        // Delete user from Firestore
+        const userRef = doc(db, 'users', userId);
+        await deleteDoc(userRef);
+        
+        // Remove from local array
+        users.value = users.value.filter(u => u.uid !== userId);
+        // Update the pending and active users lists
+        pendingUsers.value = users.value.filter(u => !u.approved);
+        activeUsers.value = users.value.filter(u => u.approved);
+        
         toast.success('User rejected successfully');
       } catch (error) {
         console.error('Error rejecting user:', error);
@@ -414,11 +557,21 @@ export default {
     const updateUserRole = async ({ userId, role }) => {
       try {
         loading.value = true;
-        const updateRoleFunc = httpsCallable(functions, 'updateUserRole');
-        await updateRoleFunc({ userId, role });
+        console.log('Updating user role:', userId, role);
         
-        // Refresh the user lists
-        await loadData();
+        // Update user role in Firestore
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, {
+          role: role,
+          updatedAt: new Date()
+        });
+        
+        // Update the local user list
+        const userIndex = users.value.findIndex(u => u.uid === userId);
+        if (userIndex !== -1) {
+          users.value[userIndex].role = role;
+        }
+        
         toast.success(`User role updated to ${role}`);
       } catch (error) {
         console.error('Error updating user role:', error);

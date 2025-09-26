@@ -170,7 +170,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirestore, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { useToast } from 'vue-toastification';
@@ -247,7 +247,7 @@ export default {
   props: {
     user: {
       type: Object,
-      required: true
+      default: () => ({})
     },
     activeItem: {
       type: String,
@@ -289,8 +289,9 @@ export default {
     });
 
     const userRole = computed(() => {
-      // In a real app, this would come from the user object or custom claims
-      return props.user?.role || 'User';
+      const role = props.user?.role?.toLowerCase() || 'user';
+      // Capitalize first letter
+      return role.charAt(0).toUpperCase() + role.slice(1);
     });
 
     // Filter navigation items based on user role
@@ -299,10 +300,20 @@ export default {
       return allNavItems.filter(item => item.roles.includes(role));
     });
     
-    // Load profile image on component mount
+    // Load profile image on component mount and when user changes
     onMounted(async () => {
       if (props.user?.uid) {
         await loadProfileImage();
+      }
+    });
+    
+    // Watch for user changes and reload profile image when user changes
+    watch(() => props.user?.uid, async (newUserId) => {
+      if (newUserId) {
+        await loadProfileImage();
+      } else {
+        // Reset profile image if no user
+        profileImageUrl.value = '';
       }
     });
     
@@ -312,7 +323,12 @@ export default {
         // First check if the user has a profileImageUrl in Firestore
         const userDoc = await getDoc(doc(db, 'users', props.user.uid));
         if (userDoc.exists() && userDoc.data().profileImageUrl) {
-          profileImageUrl.value = userDoc.data().profileImageUrl;
+          // Add cache busting parameter to prevent browser caching
+          const timestamp = new Date().getTime();
+          const imageUrl = userDoc.data().profileImageUrl;
+          profileImageUrl.value = imageUrl.includes('?') ? 
+            `${imageUrl}&t=${timestamp}` : 
+            `${imageUrl}?t=${timestamp}`;
         }
       } catch (error) {
         console.error('Error loading profile image:', error);
@@ -346,8 +362,9 @@ export default {
         // Upload the file
         await uploadBytes(imageRef, file);
         
-        // Get the download URL
-        const downloadURL = await getDownloadURL(imageRef);
+        // Get the download URL with cache busting
+        const timestamp = new Date().getTime();
+        const downloadURL = await getDownloadURL(imageRef) + `?t=${timestamp}`;
         
         // Update the user's profile in Firestore
         await updateDoc(doc(db, 'users', userId), {
@@ -357,6 +374,14 @@ export default {
         
         // Update the local state
         profileImageUrl.value = downloadURL;
+        
+        // Force a UI refresh by briefly clearing and resetting the URL
+        setTimeout(() => {
+          profileImageUrl.value = '';
+          setTimeout(() => {
+            profileImageUrl.value = downloadURL;
+          }, 50);
+        }, 50);
         
         toast.success('Profile picture updated successfully');
       } catch (error) {
