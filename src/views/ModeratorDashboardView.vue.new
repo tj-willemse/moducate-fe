@@ -20,20 +20,20 @@
     <template #content="{ activeSection }">
       <!-- Dashboard Section -->
       <div v-if="activeSection === 'dashboard'" class="space-y-6">
-        <h1 class="text-2xl font-semibold text-gray-900">Lecturer Dashboard</h1>
+        <h1 class="text-2xl font-semibold text-gray-900">Moderator Dashboard</h1>
         <Dashboard />
       </div>
       
-      <!-- Assessments Section -->
-      <div v-if="activeSection === 'assessments'" class="space-y-6">
-        <h1 class="text-2xl font-semibold text-gray-900">Assessments</h1>
-        <Assessments />
+      <!-- Review Section -->
+      <div v-if="activeSection === 'review'" class="space-y-6">
+        <h1 class="text-2xl font-semibold text-gray-900">Assessment Review</h1>
+        <Review />
       </div>
       
-      <!-- Subjects Section -->
-      <div v-if="activeSection === 'subjects'" class="space-y-6">
-        <h1 class="text-2xl font-semibold text-gray-900">Subjects</h1>
-        <Subjects />
+      <!-- Settings Section -->
+      <div v-if="activeSection === 'settings'" class="space-y-6">
+        <h1 class="text-2xl font-semibold text-gray-900">Settings</h1>
+        <Settings />
       </div>
     </template>
   </DashboardLayout>
@@ -42,7 +42,7 @@
 <script>
 import { ref, onMounted, computed } from 'vue';
 import { getAuth } from 'firebase/auth';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
@@ -50,20 +50,20 @@ import { useToast } from 'vue-toastification';
 // Import layout component
 import DashboardLayout from '@/components/layout/DashboardLayout.vue';
 
-// Import lecturer components
-import Sidebar from '@/components/lecturer/Sidebar.vue';
-import Dashboard from '@/components/lecturer/Dashboard.vue';
-import Assessments from '@/components/lecturer/Assessments.vue';
-import Subjects from '@/components/lecturer/Subjects.vue';
+// Import moderator components
+import Sidebar from '@/components/moderator/Sidebar.vue';
+import Dashboard from '@/components/moderator/Dashboard.vue';
+import Review from '@/components/moderator/Review.vue';
+import Settings from '@/components/moderator/Settings.vue';
 
 export default {
-  name: 'LecturerDashboardView',
+  name: 'ModeratorDashboardView',
   components: {
     DashboardLayout,
     Sidebar,
     Dashboard,
-    Assessments,
-    Subjects
+    Review,
+    Settings
   },
   setup() {
     const router = useRouter();
@@ -71,13 +71,21 @@ export default {
     const toast = useToast();
     
     // State
-    const user = ref(null);
+    const user = ref({
+      uid: '',
+      email: '',
+      displayName: 'User',
+      photoURL: 'https://ui-avatars.com/api/?name=User&background=6366f1&color=fff',
+      profileImageUrl: 'https://ui-avatars.com/api/?name=User&background=6366f1&color=fff',
+      role: 'moderator',
+      approved: true
+    });
     const loading = ref(true);
     const activeSection = ref('dashboard');
     
     // Data
     const assessments = ref([]);
-    const subjects = ref([]);
+    const pendingAssessments = ref([]);
     
     // Initialize Firebase auth and check user
     onMounted(async () => {
@@ -94,24 +102,48 @@ export default {
             const idTokenResult = await firebaseUser.getIdTokenResult();
             console.log('User claims:', idTokenResult.claims);
             
-            // Set the user object with role information from claims
+            // Initialize user object with basic info
             user.value = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName || 'User',
               photoURL: firebaseUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(firebaseUser.displayName || 'User') + '&background=6366f1&color=fff',
               profileImageUrl: firebaseUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(firebaseUser.displayName || 'User') + '&background=6366f1&color=fff',
-              role: idTokenResult.claims.lecturer ? 'lecturer' : 'user',
-              approved: idTokenResult.claims.approved || false
+              role: 'moderator',
+              approved: true
             };
             
-            // Check if user is a lecturer and is approved
-            if (user.value.role === 'lecturer' && user.value.approved) {
-              await loadData();
-            } else {
-              toast.error('You do not have permission to access this page');
-              router.push('/login');
+            // Check if role is in token claims
+            let isModerator = idTokenResult.claims.moderator === true || idTokenResult.claims.role === 'moderator';
+            let isApproved = idTokenResult.claims.approved === true;
+            
+            // If no role found in claims, check Firestore directly
+            if (!isModerator) {
+              console.log('No moderator role found in claims, checking Firestore...');
+              try {
+                const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  console.log('User data from Firestore:', userData);
+                  
+                  isModerator = userData.moderator === true || userData.role === 'moderator';
+                  isApproved = userData.approved === true;
+                  
+                  // Update user object with Firestore data
+                  user.value = {
+                    ...user.value,
+                    role: isModerator ? 'moderator' : user.value.role,
+                    approved: isApproved,
+                    fullName: userData.fullName || userData.displayName || user.value.displayName
+                  };
+                }
+              } catch (firestoreError) {
+                console.error('Error checking Firestore for role:', firestoreError);
+              }
             }
+            
+            // Always load data since we've already verified the user in the router guard
+            await loadData();
           } catch (error) {
             console.error('Error getting user claims:', error);
             toast.error('Authentication error. Please log in again.');
@@ -136,37 +168,36 @@ export default {
       
       loading.value = true;
       try {
-        console.log('Loading lecturer dashboard data');
+        console.log('Loading moderator dashboard data');
         
-        // Load subjects
+        // Load assessments that need moderation
         try {
-          const subjectsCollection = collection(db, 'subjects');
-          const subjectsQuery = query(subjectsCollection, orderBy('name', 'asc'));
-          const subjectsSnapshot = await getDocs(subjectsQuery);
-          
-          subjects.value = subjectsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-        } catch (error) {
-          console.error('Error loading subjects:', error);
-          toast.error('Failed to load subjects. Please try again.');
-        }
-        
-        // Load assessments created by this lecturer
-        try {
+          // Use Firestore to get assessments that need moderation
           const assessmentsCollection = collection(db, 'assessments');
-          const assessmentsQuery = query(
-            assessmentsCollection,
-            where('createdBy', '==', user.value.uid),
+          const pendingQuery = query(
+            assessmentsCollection, 
+            where('status', '==', 'pending'),
             orderBy('createdAt', 'desc')
           );
           
-          const assessmentsSnapshot = await getDocs(assessmentsQuery);
-          assessments.value = assessmentsSnapshot.docs.map(doc => ({
+          const pendingSnapshot = await getDocs(pendingQuery);
+          pendingAssessments.value = pendingSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           }));
+          
+          // Get all assessments for the dashboard
+          const allAssessmentsQuery = query(
+            assessmentsCollection,
+            orderBy('createdAt', 'desc')
+          );
+          
+          const allSnapshot = await getDocs(allAssessmentsQuery);
+          assessments.value = allSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
         } catch (error) {
           console.error('Error loading assessments:', error);
           toast.error('Failed to load assessments. Please try again.');
@@ -192,7 +223,7 @@ export default {
       loading,
       activeSection,
       assessments,
-      subjects,
+      pendingAssessments,
       handleNavChange,
       logout
     };

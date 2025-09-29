@@ -149,8 +149,8 @@ export default {
           displayName: name.value
         })
         
-        // Save user data to Firestore with pending approval status
-        await setDoc(doc(db, 'users', user.uid), {
+        // Prepare user data with both role string and boolean flags
+        const userData = {
           uid: user.uid,
           fullName: name.value,
           email: email.value,
@@ -159,7 +159,19 @@ export default {
           active: true,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
-        })
+        }
+        
+        // Add boolean role flags based on selected role
+        if (role.value === 'moderator') {
+          userData.moderator = true
+          userData.lecturer = false
+        } else if (role.value === 'lecturer') {
+          userData.lecturer = true
+          userData.moderator = false
+        }
+        
+        // Save user data to Firestore with pending approval status
+        await setDoc(doc(db, 'users', user.uid), userData)
         
         // Clear form
         name.value = ''

@@ -215,7 +215,7 @@
 import { ref, onMounted, computed, defineComponent, h } from 'vue';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
@@ -505,12 +505,23 @@ export default {
         loading.value = true;
         console.log('Approving user with ID:', userId);
         
-        // Update user in Firestore
+        // Get current user data first
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, {
-          approved: true,
-          updatedAt: new Date()
-        });
+        const userDoc = await getDoc(userRef);
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const updateData = {
+            approved: true,
+            updatedAt: new Date()
+          };
+          
+          // Update user in Firestore
+          await updateDoc(userRef, updateData);
+        } else {
+          console.error('User document not found');
+          toast.error('User document not found');
+        }
         
         // Update the local user list
         const userIndex = users.value.findIndex(u => u.uid === userId);
@@ -561,10 +572,24 @@ export default {
         
         // Update user role in Firestore
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, {
+        
+        // Prepare update data with both role string and boolean flags
+        const updateData = {
           role: role,
-          updatedAt: new Date()
-        });
+          updatedAt: new Date(),
+          // Reset all role booleans
+          moderator: false,
+          lecturer: false
+        };
+        
+        // Set the appropriate boolean flag based on the role
+        if (role === 'moderator') {
+          updateData.moderator = true;
+        } else if (role === 'lecturer') {
+          updateData.lecturer = true;
+        }
+        
+        await updateDoc(userRef, updateData);
         
         // Update the local user list
         const userIndex = users.value.findIndex(u => u.uid === userId);

@@ -133,13 +133,59 @@ export default {
         const isAdmin = idTokenResult.claims.admin === true
         console.log('Is admin?', isAdmin)
         
-        // Redirect based on user role
-        if (isAdmin) {
+        // Check if role is in token claims
+        if (idTokenResult.claims.admin === true) {
           console.log('Redirecting to admin dashboard')
           router.push('/admin')
-        } else {
-          console.log('Redirecting to regular dashboard')
-          router.push('/dashboard')
+          return
+        } else if (idTokenResult.claims.moderator === true || idTokenResult.claims.role === 'moderator') {
+          console.log('Redirecting to moderator dashboard')
+          router.push('/moderator')
+          return
+        } else if (idTokenResult.claims.lecturer === true || idTokenResult.claims.role === 'lecturer') {
+          console.log('Redirecting to lecturer dashboard')
+          router.push('/lecturer')
+          return
+        }
+        
+        // If no role found in claims, check Firestore directly
+        console.log('No role found in claims, checking Firestore...')
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            console.log('User data from Firestore:', userData)
+            
+            if (userData.approved !== true) {
+              console.log('User is not approved')
+              errorMessage.value = 'Your account is pending approval by an administrator.'
+              await signOut(auth)
+              return
+            }
+            
+            if (userData.admin === true) {
+              console.log('User is admin (from Firestore)')
+              router.push('/admin')
+              return
+            } else if (userData.moderator === true || userData.role === 'moderator') {
+              console.log('User is moderator (from Firestore)')
+              router.push('/moderator')
+              return
+            } else if (userData.lecturer === true || userData.role === 'lecturer') {
+              console.log('User is lecturer (from Firestore)')
+              router.push('/lecturer')
+              return
+            }
+          }
+          
+          // If we get here, no valid role was found
+          console.log('No valid role found in Firestore either')
+          errorMessage.value = 'Your account does not have a valid role. Please contact an administrator.'
+          await signOut(auth)
+        } catch (error) {
+          console.error('Error checking Firestore for role:', error)
+          errorMessage.value = 'Error checking your account. Please try again.'
+          await signOut(auth)
         }
       } catch (error) {
         console.error('Login error:', error)
