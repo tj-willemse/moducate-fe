@@ -18,19 +18,17 @@
       
       <!-- Content Slot -->
       <template #content="{ activeSection }">
-        <!-- Dashboard Section -->
+    
         <div v-if="activeSection === 'dashboard'" class="space-y-6">
           <h1 class="text-2xl font-semibold text-gray-900">Moderator Dashboard</h1>
           <Dashboard />
         </div>
-        
-        <!-- Review Section -->
+  
         <div v-if="activeSection === 'review'" class="space-y-6">
-          <h1 class="text-2xl font-semibold text-gray-900">Assessment Review</h1>
+          <h1 class="text-2xl font-semibold text-gray-900">Assessment Reviews</h1>
           <Review />
         </div>
         
-        <!-- Settings Section -->
         <div v-if="activeSection === 'settings'" class="space-y-6">
           <h1 class="text-2xl font-semibold text-gray-900">Settings</h1>
           <Settings />
