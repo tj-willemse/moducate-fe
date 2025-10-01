@@ -1,5 +1,29 @@
 <template>
   <div class="space-y-6">
+    <!-- Dashboard Header with Semester Selector -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <h1 class="text-2xl font-semibold text-gray-900">My Dashboard</h1>
+      
+      <!-- Semester Selector -->
+      <div class="relative">
+        <select 
+          v-model="selectedSemester" 
+          @change="handleSemesterChange"
+          class="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent cursor-pointer"
+        >
+          <option v-for="semester in semesters" :key="semester.value" :value="semester.value">
+            {{ semester.label }}
+          </option>
+        </select>
+        <!-- Dropdown Icon -->
+        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+    </div>
+    
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="bg-white rounded-lg shadow-md p-6 flex items-center">
@@ -36,6 +60,80 @@
           <div class="text-sm text-gray-500 font-medium">Pending</div>
           <div class="text-2xl font-bold">{{ pendingCount }}</div>
         </div>
+      </div>
+    </div>
+    
+    <!-- Quick Upload Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Upload</h2>
+      
+      <div class="flex flex-col sm:flex-row gap-4">
+        <!-- Subject Selector -->
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-white bg-cyan-400 px-4 py-2 rounded-t-lg">Subject</label>
+          <select 
+            v-model="selectedSubject"
+            class="w-full px-4 py-3 border border-gray-300 rounded-b-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-cyan-50"
+          >
+            <option value="">Select subject</option>
+            <option v-for="subject in subjects" :key="subject.id" :value="subject.id">
+              {{ subject.name }}
+            </option>
+          </select>
+        </div>
+        
+        <!-- Type Selector -->
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-white bg-pink-400 px-4 py-2 rounded-t-lg">Type</label>
+          <select 
+            v-model="selectedType"
+            class="w-full px-4 py-3 border border-gray-300 rounded-b-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-pink-50"
+          >
+            <option value="">Select Type</option>
+            <option value="exam">Exam</option>
+            <option value="test">Test</option>
+            <option value="assignment">Assignment</option>
+            <option value="quiz">Quiz</option>
+          </select>
+        </div>
+        
+        <!-- Upload Document -->
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-gray-700 px-4 py-2">Upload document</label>
+          <div class="border-2 border-dashed border-gray-300 rounded-lg p-3 flex items-center justify-center hover:border-gray-400 transition-colors cursor-pointer">
+            <input 
+              type="file" 
+              ref="fileInput"
+              @change="handleFileSelect"
+              accept=".pdf"
+              class="hidden"
+            />
+            <button 
+              @click="$refs.fileInput.click()"
+              class="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span class="text-sm">{{ selectedFile ? selectedFile.name : 'Choose file' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Submit Button -->
+      <div class="mt-4">
+        <button 
+          @click="handleSubmitAssessment"
+          :disabled="!canSubmit || uploading"
+          class="px-6 py-2 bg-green-400 hover:bg-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-full transition-colors flex items-center gap-2"
+        >
+          <svg v-if="uploading" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>{{ uploading ? 'Uploading...' : 'Submit Assessment' }}</span>
+        </button>
       </div>
     </div>
     
@@ -92,7 +190,12 @@
 </template>
 
 <script>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import { useToast } from 'vue-toastification';
+import { getAuth } from 'firebase/auth';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { db } from '@/firebase/config';
 
 export default {
   name: 'LecturerDashboard',
@@ -101,12 +204,136 @@ export default {
       type: Array,
       default: () => []
     },
+    subjects: {
+      type: Array,
+      default: () => []
+    },
     loading: {
       type: Boolean,
       default: false
     }
   },
-  setup(props) {
+  setup(props, { emit }) {
+    const toast = useToast();
+    const auth = getAuth();
+    const storage = getStorage();
+    
+    // Semester state
+    const selectedSemester = ref('2025-1');
+    const semesters = ref([
+      { value: '2025-1', label: '2025 - Semester 1' },
+      { value: '2024-2', label: '2024 - Semester 2' },
+      { value: '2024-1', label: '2024 - Semester 1' }
+    ]);
+    
+    // Quick Upload state
+    const selectedSubject = ref('');
+    const selectedType = ref('');
+    const selectedFile = ref(null);
+    const fileInput = ref(null);
+    
+    const canSubmit = computed(() => {
+      return selectedSubject.value && selectedType.value && selectedFile.value;
+    });
+    
+    const handleSemesterChange = () => {
+      const semester = semesters.value.find(s => s.value === selectedSemester.value);
+      toast.info(`Switched to ${semester?.label}`);
+    };
+    
+    const handleFileSelect = (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error('File size must be less than 10MB');
+          return;
+        }
+        selectedFile.value = file;
+      }
+    };
+    
+    const uploading = ref(false);
+    
+    const handleSubmitAssessment = async () => {
+      if (!canSubmit.value) {
+        toast.error('Please fill in all fields');
+        return;
+      }
+      
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        toast.error('You must be logged in to upload assessments');
+        return;
+      }
+      
+      uploading.value = true;
+      
+      try {
+        // Get user's full name from Firestore
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.exists() ? userDoc.data() : null;
+        const lecturerName = userData?.fullName || userData?.displayName || currentUser.displayName || currentUser.email;
+        
+        // Get subject name
+        const subject = props.subjects.find(s => s.id === selectedSubject.value);
+        const subjectName = subject?.name || 'Unknown Subject';
+        
+        // Create unique filename
+        const timestamp = Date.now();
+        const fileName = `${subjectName}_${selectedType.value}_${timestamp}.pdf`;
+        const filePath = `assessments/${currentUser.uid}/${fileName}`;
+        
+        // Upload file to Firebase Storage
+        const fileRef = storageRef(storage, filePath);
+        await uploadBytes(fileRef, selectedFile.value);
+        
+        // Get download URL
+        const downloadURL = await getDownloadURL(fileRef);
+        
+        // Create assessment document in Firestore
+        const assessmentsCollection = collection(db, 'assessments');
+        await addDoc(assessmentsCollection, {
+          title: `${subjectName} - ${selectedType.value}`,
+          subject: subjectName,
+          subjectId: selectedSubject.value,
+          type: selectedType.value,
+          fileName: selectedFile.value.name,
+          fileUrl: downloadURL,
+          filePath: filePath,
+          fileSize: selectedFile.value.size,
+          status: 'pending',
+          createdBy: currentUser.uid,
+          createdByName: lecturerName,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          semester: selectedSemester.value,
+          approved: false,
+          moderatorId: null,
+          moderatorName: null,
+          comments: []
+        });
+        
+        toast.success('Assessment uploaded successfully!');
+        
+        // Emit event to refresh assessments list
+        emit('assessment-uploaded');
+        
+        // Reset form
+        selectedSubject.value = '';
+        selectedType.value = '';
+        selectedFile.value = null;
+        if (fileInput.value) {
+          fileInput.value.value = '';
+        }
+      } catch (error) {
+        console.error('Error uploading assessment:', error);
+        toast.error('Failed to upload assessment. Please try again.');
+      } finally {
+        uploading.value = false;
+      }
+    };
+    
     const assessmentsCount = computed(() => props.assessments.length);
     
     const approvedCount = computed(() => 
@@ -145,6 +372,17 @@ export default {
     };
     
     return {
+      selectedSemester,
+      semesters,
+      selectedSubject,
+      selectedType,
+      selectedFile,
+      fileInput,
+      canSubmit,
+      uploading,
+      handleSemesterChange,
+      handleFileSelect,
+      handleSubmitAssessment,
       assessmentsCount,
       approvedCount,
       pendingCount,

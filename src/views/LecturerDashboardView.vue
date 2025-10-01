@@ -20,8 +20,12 @@
     <template #content="{ activeSection }">
       <!-- Dashboard Section -->
       <div v-if="activeSection === 'dashboard'" class="space-y-6">
-        <h1 class="text-2xl font-semibold text-gray-900">Lecturer Dashboard</h1>
-        <Dashboard />
+        <Dashboard 
+          :assessments="assessments" 
+          :subjects="subjects" 
+          :loading="loading"
+          @assessment-uploaded="loadData"
+        />
       </div>
       
       <!-- Assessments Section -->
@@ -88,7 +92,7 @@ export default {
     
     // State
     const user = ref(null);
-    const loading = ref(true);
+    const loading = ref(false);
     const activeSection = ref('dashboard');
     
     // Data
@@ -229,6 +233,7 @@ export default {
       activeSection,
       assessments,
       subjects,
+      loadData,
       handleNavChange,
       logout
     };

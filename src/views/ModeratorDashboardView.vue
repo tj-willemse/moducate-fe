@@ -20,17 +20,14 @@
       <template #content="{ activeSection }">
     
         <div v-if="activeSection === 'dashboard'" class="space-y-6">
-          <h1 class="text-2xl font-semibold text-gray-900">Moderator Dashboard</h1>
-          <Dashboard />
+          <Dashboard :assessments="assignedAssessments" />
         </div>
   
         <div v-if="activeSection === 'review'" class="space-y-6">
-          <h1 class="text-2xl font-semibold text-gray-900">Assessment Reviews</h1>
           <Review />
         </div>
         
         <div v-if="activeSection === 'settings'" class="space-y-6">
-          <h1 class="text-2xl font-semibold text-gray-900">Settings</h1>
           <Settings />
         </div>
       </template>
@@ -78,12 +75,13 @@
         role: 'moderator',
         approved: true
       });
-      const loading = ref(true);
+      const loading = ref(false);
       const activeSection = ref('dashboard');
       
       // Data
       const assessments = ref([]);
       const pendingAssessments = ref([]);
+      const assignedAssessments = ref([]);
       
       // Initialize Firebase auth and check user
       onMounted(async () => {
@@ -168,33 +166,24 @@
         try {
           console.log('Loading moderator dashboard data');
           
-          // Load assessments that need moderation
+          // Load assessments assigned to this moderator
           try {
-            // Use Firestore to get assessments that need moderation
             const assessmentsCollection = collection(db, 'assessments');
-            const pendingQuery = query(
-              assessmentsCollection, 
-              where('status', '==', 'pending'),
-              orderBy('createdAt', 'desc')
-            );
             
-            const pendingSnapshot = await getDocs(pendingQuery);
-            pendingAssessments.value = pendingSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            
-            // Get all assessments for the dashboard
-            const allAssessmentsQuery = query(
+            // Query assessments where moderatorId equals current user's UID
+            const assignedQuery = query(
               assessmentsCollection,
+              where('moderatorId', '==', user.value.uid),
               orderBy('createdAt', 'desc')
             );
             
-            const allSnapshot = await getDocs(allAssessmentsQuery);
-            assessments.value = allSnapshot.docs.map(doc => ({
+            const assignedSnapshot = await getDocs(assignedQuery);
+            assignedAssessments.value = assignedSnapshot.docs.map(doc => ({
               id: doc.id,
               ...doc.data()
             }));
+            
+            console.log('Assigned assessments:', assignedAssessments.value);
             
           } catch (error) {
             console.error('Error loading assessments:', error);
@@ -222,6 +211,7 @@
         activeSection,
         assessments,
         pendingAssessments,
+        assignedAssessments,
         handleNavChange,
         logout
       };

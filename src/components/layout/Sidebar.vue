@@ -271,7 +271,6 @@ export default {
       { id: 'subjects', name: 'Subjects', icon: SubjectIcon, href: '#', roles: ['admin', 'lecturer'] },
       { id: 'users', name: 'User Management', icon: ModeratorIcon, href: '#', roles: ['admin'] },
       { id: 'archives', name: 'Archives', icon: ArchiveIcon, href: '#', roles: ['admin', 'moderator'] },
-      { id: 'activity', name: 'Logs & Activity', icon: ActivityIcon, href: '#', roles: ['admin'] },
       { id: 'settings', name: 'Settings', icon: SettingsIcon, href: '#', roles: ['admin', 'moderator', 'lecturer'] }
     ];
 
