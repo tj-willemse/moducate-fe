@@ -36,6 +36,14 @@ const router = createRouter({
   ]
 })
 
+// Wait for Firebase Auth to initialize
+let authInitialized = false
+const auth = getAuth()
+
+auth.onAuthStateChanged(() => {
+  authInitialized = true
+})
+
 // Navigation guard for authentication
 router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
@@ -44,7 +52,16 @@ router.beforeEach(async (to, from, next) => {
   const requiresLecturer = to.matched.some(record => record.meta.requiresLecturer)
   
   if (requiresAuth) {
-    const auth = getAuth()
+    // Wait for Firebase Auth to initialize if it hasn't already
+    if (!authInitialized) {
+      await new Promise((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged(() => {
+          unsubscribe()
+          resolve()
+        })
+      })
+    }
+    
     const currentUser = auth.currentUser
     
     if (!currentUser) {
